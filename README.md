@@ -10,8 +10,8 @@
 5. aprire tre terminali in Visual Studio Code
 6. eseguire wsl in ciascuno dei tre
 7. usare il primo terminale per creare l'immagine docker eseguendo:
-  ```cd ./docker_ws
-     ./build_progetto.sh```
+  ```cd ./docker_ws```
+  ```./build_progetto.sh```
 8. aspettare il completamento dell'operazione
 9. creare il container eseguendo
    ```cd ..
