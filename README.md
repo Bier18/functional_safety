@@ -1,4 +1,4 @@
-## COME USARE LA REPOSIORY
+## COME USARE LA REPOSITORY
 
 **Si suppone che l'utente abbia installati docker e wsl sul proprio dispositivo**
 
