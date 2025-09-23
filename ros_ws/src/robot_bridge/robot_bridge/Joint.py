@@ -21,7 +21,7 @@ class Joint():
     def effort(self) -> float:
         return self._effort
     
-        @position.setter
+    @position.setter
     def position(self, value: float):
         self._position = value
 

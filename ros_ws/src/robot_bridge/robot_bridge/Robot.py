@@ -1,4 +1,4 @@
-from joint import Joint
+from .Joint import Joint
 
 class Robot:
     def __init__(self, name: str, joint_names: list[str]):

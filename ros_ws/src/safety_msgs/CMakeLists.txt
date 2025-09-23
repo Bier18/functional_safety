@@ -18,6 +18,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RobotState.msg"
   "msg/SafetyParams.msg"
   "msg/SafetyMonitorData.msg"
+  "msg/Control.msg"
   "srv/PowerForceLimiting.srv"
   "srv/SafetyRatedStop.srv"
   "action/PowerForceLimiting.action"

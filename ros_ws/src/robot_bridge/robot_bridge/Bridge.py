@@ -1,83 +1,120 @@
 import rclpy
 from rclpy.node import Node
-import yaml
 import os
-from robot import Robot
-from joint import Joint
-from rclpy.qos import QoSProfile
+import yaml
+from ament_index_python.packages import get_package_share_directory
+from sensor_msgs.msg import JointState
+from .Robot import Robot
+from .Joint import Joint
+import sys
+
 
 class Bridge(Node):
-    def __init__(self, robot_name: str, yaml_file: str):
-        super().__init__('bridge_node')
 
-        # --- Load YAML ---
-        with open(yaml_file, 'r') as f:
+    def __init__(self):
+        super().__init__("bridge_node")
+
+        # read the configuration file
+        with open(os.path.join(get_package_share_directory('robot_bridge'), 'config', 'bridge.yaml')) as f:
             self.config = yaml.safe_load(f)
 
-        # --- Initialize Robot and Joints ---
-        joint_names = [j['name'] for j in self.config['/**']['bridge_params']]
-        self.robot = Robot(robot_name, joint_names)
+        # initialize dictionaries
+        self.ros_subscription = {}
+        self.ros_publisher = {}
+        self.controller_subscription = {}
+        self.controller_publisher = {}
 
-        # --- Setup subscribers and publishers ---
-        self.subscriptions = {}
-        self.publishers = {}
+        # initialize digital twin
+        joint_list = []
 
-        for joint_conf in self.config['/**']['bridge_params']:
-            name = joint_conf['name']
-
-            # ROS topic for reading state
-            ros_topic_conf = joint_conf.get('ros_topic')
+        for joint in self.config['/**']['robot_joints']:
+            # --- ROS subscription (robot state)
+            ros_topic_conf = joint.get('ros_topic')
             if ros_topic_conf:
-                state_topic = ros_topic_conf['robot_topic']
-                msg_type = self._import_msg_type(ros_topic_conf['robot_msg_type'])
-                qos = QoSProfile(depth=10)
-                self.subscriptions[name] = self.create_subscription(
-                    msg_type,
-                    state_topic,
-                    lambda msg, j_name=name: self._read_joint_state(j_name, msg, ros_topic_conf['mapping']),
-                    qos
+                message = self.import_msg(ros_topic_conf['robot_msg_type'])
+                topic = ros_topic_conf['robot_topic']
+                self.ros_subscription[joint['name']] = self.create_subscription(
+                    message,
+                    topic,
+                    lambda msg, name=joint['name']: self.save_and_translate(msg, name),
+                    10
+                )
+                # publisher verso standard JointState
+                self.ros_publisher[joint['name']] = self.create_publisher(
+                    JointState,
+                    f"/{joint['name']}/state",
+                    10
                 )
 
-            # ROS topic for sending control (to controller)
-            control_topic_conf = joint_conf.get('control_topic')
-            if control_topic_conf:
-                ctrl_topic = control_topic_conf['controller_topic']
-                ctrl_msg_type = self._import_msg_type(control_topic_conf['controller_msg_type'])
-                self.publishers[name] = self.create_publisher(ctrl_msg_type, ctrl_topic, 10)
+            # --- Control subscription
+            ctrl_topic_conf = joint.get('control_topic')
+            if ctrl_topic_conf:
+                ctrl_msg_type = self.import_msg(ctrl_topic_conf['controller_msg_type'])
+                ctrl_topic = ctrl_topic_conf['controller_topic']
+                self.controller_subscription[joint['name']] = self.create_subscription(
+                    ctrl_msg_type,
+                    ctrl_topic,
+                    lambda msg, name=joint['name']: self.imperio(msg, name),
+                    10
+                )
+                # publisher verso robot
+                robot_msg_type = self.import_msg(ctrl_topic_conf['robot_msg_type'])
+                robot_topic = ctrl_topic_conf['robot_topic']
+                self.controller_publisher[joint['name']] = self.create_publisher(
+                    robot_msg_type,
+                    robot_topic,
+                    10
+                )
 
-    def _import_msg_type(self, type_str: str):
-        """
-        Import ROS message class dynamically from string e.g. 'sensor_msgs/JointState'
-        """
-        package, msg = type_str.split('/')
+            joint_list.append(Joint(joint['name']))
+
+        self.robot = Robot(self.config['/**']['robot_name'], joint_list)
+
+    def import_msg(self, msg_type: str):
+        parts = msg_type.split('/')
+        if len(parts) < 2:
+            raise ValueError(f"Tipo messaggio invalido: '{msg_type}'")
+        package = parts[0]
+        msg = parts[-1]  # prende l’ultimo elemento come nome del messaggio
         module = __import__(f"{package}.msg", fromlist=[msg])
         return getattr(module, msg)
 
-    def _read_joint_state(self, joint_name: str, msg, mapping: dict):
-        """
-        Aggiorna il digital twin con i dati del giunto.
-        """
-        pos = getattr(msg, mapping['position'])
-        vel = getattr(msg, mapping['velocity'])
-        eff = getattr(msg, mapping['effort'])
-        self.robot.update_joint(joint_name, pos, vel, eff)
+    def imperio(self, msg, name: str):
+        joint_conf = next((j for j in self.config['/**']['robot_joints'] if j['name'] == name), None)
+        if not joint_conf:
+            return
+        ctrl_conf = joint_conf['control_topic']
+        mapping = ctrl_conf['mapping']
 
-    def send_control(self, joint_name: str, position: float = None, velocity: float = None, effort: float = None):
-        """
-        Pubblica i comandi sul topic controller per il giunto specifico.
-        """
-        joint_conf = next(j for j in self.config['/**']['bridge_params'] if j['name'] == joint_name)
-        control_topic_conf = joint_conf['control_topic']
-        msg_type = self._import_msg_type(control_topic_conf['controller_msg_type'])
-        msg = msg_type()
-        mapping = control_topic_conf['mapping']
-        if position is not None:
-            setattr(msg, mapping['position'], position)
-        if velocity is not None:
-            setattr(msg, mapping['velocity'], velocity)
-        if effort is not None:
-            setattr(msg, mapping['effort'], effort)
-        self.publishers[joint_name].publish(msg)
+        msg_type = self.import_msg(ctrl_conf['robot_msg_type'])
+        robot_msg = msg_type()
+
+        setattr(robot_msg, mapping['position_setpoint'], msg.position_setpoint)
+        setattr(robot_msg, mapping['velocity_setpoint'], msg.velocity_setpoint)
+        setattr(robot_msg, mapping['effort_setpoint'], msg.effort_setpoint)
+
+        self.controller_publisher[name].publish(robot_msg)
+
+    def save_and_translate(self, msg, name: str):
+        joint_conf = next(j for j in self.config['/**']['robot_joints'] if j['name'] == name)
+        mapping = joint_conf['ros_topic']['mapping']
+
+        pos = getattr(msg, mapping['position'], None)
+        vel = getattr(msg, mapping['velocity'], None)
+        eff = getattr(msg, mapping['effort'], None)
+
+        joint = self.robot.get_joint(name)
+        joint.update_state(pos, vel, eff)
+
+        # costruisci un JointState standardizzato
+        js = JointState()
+        js.header.stamp = self.get_clock().now().to_msg()
+        js.name = [name]
+        js.position = [pos] if pos is not None else []
+        js.velocity = [vel] if vel is not None else []
+        js.effort = [eff] if eff is not None else []
+
+        self.ros_publisher[name].publish(js)
 
 def main(args=None):
     rclpy.init(args=args)

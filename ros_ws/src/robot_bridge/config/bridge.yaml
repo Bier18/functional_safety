@@ -1,0 +1,28 @@
+# This yaml file is just an example demonstrating how to implement the bridge between the security framework and the real
+# robot. In this case a simple three link planar manipulator is used, so that user can undestrand how the program works.
+# For a real robot, the user must provide the actual joint topics, message types, and joint parameters.
+
+
+/**:
+  # joint topics
+  robot_name: "digital_twin"
+  robot_joints:
+    - name: "joint1"
+      ros_topic:
+        robot_topic: "/turtle1/pose"
+        robot_msg_type: "turtlesim/msg/Pose"
+        controller_topic: "/joint1/state"
+        controller_msg_type: "sensor_msgs/JointState"
+        mapping:
+          position: "x"
+          velocity: "linear_velocity"
+          effort: "theta"
+      control_topic:
+        robot_topic: "/turtle1/cmd_vel"
+        robot_msg_type: "geometry_msgs/msg/Twist"
+        controller_topic: "/joint1/control"
+        controller_msg_type: "safety_msgs/Control"
+        mapping:
+          position: "linear.x"
+          velocity: "linear.y"
+          effort: "angular.z"
