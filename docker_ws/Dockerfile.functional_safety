@@ -6,6 +6,7 @@ FROM ros:humble
 # -----------------------------------------
 # rqt_graph: graphical tool to visualize ROS computation graph
 RUN apt update -y && apt install -y ros-humble-rqt-graph
+RUN apt update -y && apt install -y ros-humble-turtlesim
 
 # wget: utility to download files from the internet
 RUN apt update -y && apt install -y wget

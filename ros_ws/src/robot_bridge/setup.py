@@ -20,6 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'bridge = robot_bridge.Bridge:main'
         ],
     },
 )

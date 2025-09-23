@@ -1,0 +1,63 @@
+===============================
+BRIDGE ARCHITECTURE WITH JOINT & ROBOTINTERFACE
+===============================
+
+          ┌───────────────────────────────┐
+          │       ROBOT HARDWARE          │
+          │  (unknown sensors/actuators)  │
+          └─────────────┬─────────────────┘
+                        │ publishes joint states
+                        ▼
+          ┌───────────────────────────────┐
+          │       bridge_node.py          │
+          │  (Python ROS 2 node)          │
+          ├───────────────────────────────┤
+          │ - Loads YAML config           │
+          │ - Creates Subscribers         │
+          │ - Creates Publishers          │
+          │ - Manages Services/Actions    │
+          └─────────────┬─────────────────┘
+                        │ updates
+                        ▼
+          ┌───────────────────────────────┐
+          │       RobotInterface          │
+          │  (manages multiple joints)    │
+          ├───────────────────────────────┤
+          │ - Holds dict of Joint objects │ 
+          │ - Updates joint state from msgs
+          │ - Prepares msgs for controller|
+          └─────────────┬─────────────────┘
+                        │ joint messages
+                        ▼
+          ┌───────────────────────────────┐
+          │           Joint               │
+          │  (represents single joint)    │
+          ├───────────────────────────────┤
+          │ - Stores position/velocity/effort
+          │ - Knows its own robot_topic & controller_topic
+          │ - Converts msg formats        │
+          └─────────────┬─────────────────┘
+                        │ ROS messages
+                        ▼
+          ┌───────────────────────────────┐
+          │    CONTROLLER (C++ node)      │
+          │ - Executes PFL/SSM/SRS/HG     │
+          │ - Receives joint states       │
+          │ - Sends control commands      │
+          └───────────────────────────────┘
+
+===============================
+FLOW DESCRIPTION:
+1. Robot publishes joint states → bridge_node Subscriber
+2. bridge_node updates Joint objects → stored in RobotInterface
+3. RobotInterface prepares messages → sent to controller
+4. Controller executes safety logic → publishes control commands
+5. bridge_node translates control commands → sends to robot topics
+6. Optional feedback via Actions/Services (PFL/SSM/SRS/HG)
+===============================
+KEY POINTS:
+- Joint abstracts each joint independently
+- RobotInterface centralizes joint management
+- bridge_node.py handles ROS 2 communication and YAML-based mapping
+- Controller remains hardware-agnostic; bridge adapts messages
+===============================
