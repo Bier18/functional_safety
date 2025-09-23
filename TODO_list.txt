@@ -1,0 +1,57 @@
+==============================
+TODO LIST - ARCHITETTURA FUNCTIONAL SAFETY
+==============================
+
+1. PACKAGE E ARCHITETTURA
+----------------------------------------
+- X Creare package ROS 2 "robot_bridge" (Python)
+- X Configurazione YAML generica per robot a N giunti
+- [ ] Creare classi:
+      - Joint
+      - RobotInterface
+      - BridgeNode (Nodo ROS 2)
+- [ ] Collegamento con controller C++ tramite Action Server
+
+2. MESSAGGI ROS
+----------------------------------------
+- X Usare sensor_msgs/JointState per feedback giunti
+- X Usare trajectory_msgs/JointTrajectory o std_msgs/Float64 per comandi giunti
+- X Definire messaggi custom per eventi safety (PFL, SSM, SRS, HG)
+
+3. STRATEGIE DI CONTROLLO
+----------------------------------------
+- PFL - Power & Force Limiting
+      - [ ] Implementare Action Server PFL in Python
+      - [ ] Calcolo velocità massima consentita
+      - [ ] Feedback continuo al controller
+      - [ ] Gestione parametri forniti dal produttore (forza, massa, area, costante elastica)
+
+- SSM - Speed & Separation Monitoring
+      - [ ] Implementare calcolo Sp(t0) nel bridge
+      - [ ] Action Server per invio setpoint al controller
+      - [ ] Feedback continuo sulla distanza calcolata
+      - [ ] Gestione parametri forniti dal produttore (Sh, Sr, Ss, Zd, Zr)
+      
+- SRS - Safety-Rated Stop
+      - [ ] Implementare notifica ingresso operatore
+      - [ ] Arresto robot immediato
+      - [ ] Eventuale Action Server o topic per comando stop
+
+- HG - Hand Guided
+      - [ ] Implementare rilevazione ingresso operatore
+      - [ ] Permettere comandi manuali con restrizioni di sicurezza
+      - [ ] Feedback continuo e limitazione velocità/forza
+
+4. INTEGRAZIONE
+----------------------------------------
+- [ ] Test con robot simulato a N giunti
+- [ ] Validazione Action Server e feedback
+- [ ] Test dei plugin safety (PFL, SSM, SRS, HG) separatamente
+- [ ] Test end-to-end controller C++ + bridge Python + robot simulato
+- [ ] Documentazione del file YAML per produttori diversi
+
+5. EXTRA / FUTURO
+----------------------------------------
+- [ ] Logging e monitoraggio runtime dei parametri safety
+- [ ] Possibilità di cambiare parametri PFL/SSM a runtime
+- [ ] Supporto multi-robot se necessario

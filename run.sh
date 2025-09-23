@@ -5,6 +5,6 @@ docker run -it --rm --net host --ipc host \
     -e DISPLAY=$DISPLAY \
     -e XAUTHORITY=$XAUTHORITY \
     -v ./ros_ws/:/root/ros_workspace \
-    --name progetto \
-    ros:progetto bash
+    --name functional_safety \
+    ros:functional_safety bash
     

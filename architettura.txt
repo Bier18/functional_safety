@@ -1,0 +1,166 @@
+==============================
+ARCHITETTURA MODULARE FUNCTIONAL SAFETY (ASCII)
+==============================
+
+          ┌───────────────────────────────┐
+          │      LIVELLO ALTO:            │
+          │   CONTROLLER DI SAFETY        │
+          │                               │
+          │  - safety_function()          │
+          │  - init()                     │
+          │  - shutdown()                 │
+          │  - on_fault_detected()        │
+          └─────────────┬─────────────────┘
+                        │ chiama
+                        │
+                        ▼
+          ┌───────────────────────────────┐
+          │     PLUGIN SAFETY             │
+          │ (PFL / SSM / SMS / ...)       │
+          │                               │
+          │ - implementano protocolli     │
+          │ - indipendenti dall'hardware  │
+          └─────────────┬─────────────────┘
+                        │ comandi / eventi generici
+                        │
+                        ▼
+          ┌───────────────────────────────┐
+          │   LIVELLO INTERMEDIO: BRIDGE  │
+          │      / LAYER DI TRADUZIONE    │
+          │                               │
+          │ - Traduce comandi/stati       │
+          │ - Legge file YAML di mapping  │
+          │ - Abilita robot generici      │
+          └─────────────┬─────────────────┘
+                        │ conversione messaggi / API
+                        │
+                        ▼
+          ┌───────────────────────────────┐
+          │     LIVELLO BASSO: ROBOT      │
+          │                               │
+          │ - Esegue comandi              │
+          │ - Fornisce feedback           │
+          │ - Gestisce eventi di sicurezza│
+          └───────────────────────────────┘
+
+==============================
+FLUSSO COMPLESSIVO:
+Controller Safety → Plugin Safety → Bridge → Robot Hardware
+==============================
+
+VANTAGGI:
+- Massima modularità e testabilità
+- Plug-and-play con robot diversi
+- Configurazione centralizzata via YAML
+- Separazione chiara tra protocolli, traduzione e hardware
+- Facilita compliance standard di functional safety
+==============================
+
+STRATEGIE DI CONTROLLO:
+
+==============================
+PFL - POWER & FORCE LIMITS
+==============================
+
+| Parametro                          | Fonte / Note                                    | Commento implementazione               |
+|------------------------------------|------------------------------------------------|-----------------------------------------|
+| Forza massima / pressione massima  | Tabulata                                       | Conosciuta, costante per il robot       |
+| Area esposta al contatto           | Fornita dal produttore                         | Non misurabile dal framework            |
+| Massa totale del sistema           | Fornita dal produttore                         | Non nota al framework                   |
+| Costante elastica del modello      | Tabulata                                       | Dipende dal modello a due corpi         |
+
+------------------------------------------------------------
+Proposta implementativa:
+- Uso di un Action Server ROS 2:
+    - Client invia richiesta con i dati:
+        - Forza massima / pressione massima
+        - Area esposta
+        - Massa totale
+        - Costante elastica
+    - Action Server calcola la velocità massima consentita
+    - Feedback continuo inviato al client:
+        - Velocità massima corrente
+        - Aggiornata fino a raggiungere la velocità target impostata dal controllore
+    - Risultato finale: velocità massima consentita confermata
+
+Vantaggi Action Server:
+- Permette feedback continuo al controller
+- Adatto per sistemi dinamici dove parametri possono cambiare
+- Mantiene separazione tra hardware (produttore) e logica safety
+
+Nota:
+- Il client può essere il controller ad alto livello (C++ plugin safety)
+- L’Action Server può essere implementato nel bridge (Python) o nel nodo safety dedicato
+- L’uso dell’Action Server è consigliato se si vuole adattabilità dinamica e feedback costante
+
+==============================
+SSM - SPEED & SEPARATION MONITORING
+==============================
+
+Formula principale:
+Sp(t0) = Sh + Sr + Ss + C + Zd + Zr
+------------------------------------
+Parametro                         | Fonte / Note                        | Commento implementazione
+----------------------------------|------------------------------------|----------------------------------------
+Sh - Cambio posizione operatore    | Da fornire dal produttore          | Non misurabile dal framework
+Sr - Tempo di reazione robot       | Da fornire dal produttore          | Dipende dal robot
+Ss - Spazio di arresto robot       | Da fornire dal produttore          | Dipende dal robot e velocità massima
+C  - Distanza di intrusione        | ISO 13855 (tabulata)               | Nota fissa
+Zd - Incertezza posizione operatore| Da fornire dal produttore          | Dipende dal sensore/vision system
+Zr - Incertezza posizione robot    | Da fornire dal produttore          | Dipende dal robot e sensori
+
+------------------------------------------------------------
+Implementazione proposta:
+- Il bridge Python:
+    - Notifica l'ingresso dell'operatore nella zona di lavoro
+    - Calcola la funzione Sp(t0) ad ogni step
+    - Pubblica/aggiorna il setpoint per il controllore
+
+- Il controllore C++:
+    - Riceve il setpoint tramite Action Server
+    - Applica l'azione di controllo per imporre la distanza calcolata
+    - Invia conferma del raggiungimento della posizione
+
+------------------------------------------------------------
+FLUSSO DELL'ACTION SERVER:
+
+Bridge Python (calcolo funzione Sp) 
+       │
+       ▼
+Controllore C++ (riceve setpoint)
+       │  (Action Server)
+       ▼
+Bridge Python (feedback continuo con posizione e valore della funzione)
+       │
+       ▼
+Bridge Python (notifica raggiungimento della posizione o uscita operatore)
+
+Vantaggi:
+- Feedback continuo al controllore
+- Funzione calcolata dinamicamente dal bridge ad ogni step
+- Separazione chiara tra calcolo della sicurezza (Python) e esecuzione controllo (C++)
+- Tutti i parametri variabili sono forniti dal produttore
+
+==============================
+SRS - SAFETY-RATED STOP
+==============================
+
+- Funzione: arresto del robot quando l'operatore entra nella zona di lavoro
+- Comportamento: il robot si ferma completamente (bloccato)
+- Implementazione:
+    - Il bridge Python rileva l'ingresso dell'operatore
+    - Notifica al controllore C++ l'evento
+    - Il controllore impone lo stop immediato tramite Action Server o topic di comando
+- Nota: tutti i parametri di rilevamento dell'operatore devono essere forniti dal produttore/sensore
+
+==============================
+HAND GUIDED (HG)
+==============================
+
+- Funzione: consente al robot di ricevere comandi manuali dall'operatore
+- Comportamento: il robot non è bloccato, ma segue le istruzioni dell'operatore
+- Implementazione:
+    - Simile al SRS per la rilevazione dell'operatore
+    - Il bridge calcola eventuali limitazioni di sicurezza
+    - Il controllore applica i comandi manuali con restrizioni di velocità e forza se necessarie
+- Nota: può essere implementato come variante del SRS con feedback continuo sul setpoint

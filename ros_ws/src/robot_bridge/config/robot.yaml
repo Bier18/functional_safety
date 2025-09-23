@@ -1,0 +1,69 @@
+# This yaml file is just an example demonstrating how to implement the bridge between the security framework and the real
+# robot. In this case a simple three link planar manipulator is used, so that user can undestrand how the program works.
+# For a real robot, the user must provide the actual joint topics, message types, and joint parameters.
+
+
+/**:
+  bridge_params:
+      # joint state topics
+    - robot_topic: "/joint1/state"
+      robot_msg_type: "sensor_msgs/JointState"
+      controller_topic: "/joint1/state"
+      controller_msg_type: "sensor_msgs/JointState"
+      direction: ROBOT_TO_CONTROLLER
+      mapping:
+        position: "position_value"
+        velocity: "velocity_value"
+        effort: "effort_value"
+
+
+    - robot_topic: "/joint2/state"
+      robot_msg_type: "sensor_msgs/JointState"
+      controller_topic: "/joint2/state"
+      controller_msg_type: "sensor_msgs/JointState"
+      direction: "ROBOT_TO_CONTROLLER"
+      mapping:
+        position: "position_value"
+        velocity: "velocity_value"
+        effort: "effort_value"
+    
+    - robot_topic: "/joint3/state"
+      robot_msg_type: "sensor_msgs/JointState"
+      controller_topic: "/joint3/state"
+      controller_msg_type: "sensor_msgs/JointState"
+      direction: "ROBOT_TO_CONTROLLER"
+      mapping:
+        position: "position_value"
+        velocity: "velocity_value"
+        effort: "effort_value"
+
+    # control topics
+    - robot_topic: "/control_topic_for_joint_1"
+      robot_msg_type: "control_msg_for_joint_1"
+      controller_topic: "/joint1/control"
+      controller_msg_type: "sensor_msgs/Float64"
+      direction: "CONTROLLER_TO_ROBOT"
+      mapping:
+        position: "position_control"
+        velocity: "velocity_control"
+        effort: "effort_control"
+
+    - robot_topic: "/control_topic_for_joint_2"
+      robot_msg_type: "control_msg_for_joint_2"
+      controller_topic: "/joint2/control"
+      controller_msg_type: "sensor_msgs/Float64"
+      direction: "CONTROLLER_TO_ROBOT"
+      mapping:
+        position: "position_control"
+        velocity: "velocity_control"
+        effort: "effort_control"
+
+    - robot_topic: "/control_topic_for_joint_3"
+      robot_msg_type: "control_msg_for_joint_3"
+      controller_topic: "/joint3/control"
+      controller_msg_type: "sensor_msgs/Float64"
+      direction: "CONTROLLER_TO_ROBOT"
+      mapping:
+        position: "position_control"
+        velocity: "velocity_control"
+        effort: "effort_control"

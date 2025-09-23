@@ -1,1 +1,1 @@
-docker exec -it progetto bash
+docker exec -it functional_safety bash

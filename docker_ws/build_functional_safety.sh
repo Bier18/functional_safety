@@ -1,0 +1,1 @@
+docker build --rm -t ros:functional_safety -f Dockerfile.functional_safety .

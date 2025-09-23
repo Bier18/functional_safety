@@ -1,0 +1,12 @@
+# Request
+bool use_force          # true = use force, false = use pressure
+float64 contact_area    # contact area in m^2 (set 0 if using force)
+float64 total_mass      # total mass of the system in kg
+float64 k               # elastic constant of the contact spring
+float64 force_max       # maximum allowable force (N)
+float64 pressure_max    # maximum allowable pressure (Pa)
+---
+# Response
+bool success            # true if PFL can be activated
+string message          # textual reason if success = false
+float64 vmax            # calculated maximum allowed velocity (m/s)

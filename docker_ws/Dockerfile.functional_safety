@@ -1,0 +1,43 @@
+# Base image: ROS 2 Humble (Ubuntu 22.04)
+FROM ros:humble
+
+# -----------------------------------------
+# Basic ROS 2 visualization and tools
+# -----------------------------------------
+# rqt_graph: graphical tool to visualize ROS computation graph
+RUN apt update -y && apt install -y ros-humble-rqt-graph
+
+# wget: utility to download files from the internet
+RUN apt update -y && apt install -y wget
+
+# liburdfdom-tools: command-line tools for working with URDF models
+RUN apt update -y && apt install -y liburdfdom-tools
+
+# -----------------------------------------
+# Simulation with Gazebo (integrated with ROS 2)
+# -----------------------------------------
+RUN apt update -y && apt install -y ros-humble-ros-gz
+
+# -----------------------------------------
+# MoveIt 2: motion planning framework for manipulators
+# -----------------------------------------
+RUN apt update -y && apt install -y \
+    ros-humble-moveit \
+    ros-humble-moveit-resources \
+    ros-humble-moveit-visual-tools
+
+# -----------------------------------------
+# ros2_control: standard interface for robot hardware and controllers
+# -----------------------------------------
+RUN apt update -y && apt install -y \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-gazebo-ros2-control
+
+# -----------------------------------------
+# Workspace setup
+# -----------------------------------------
+WORKDIR /root/ros_workspace
+
+# colcon: build tool for ROS 2 workspaces
+RUN apt update -y && apt install -y python3-colcon-common-extensions
