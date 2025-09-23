@@ -1,0 +1,17 @@
+# Colcon build folders
+build/
+install/
+log/
+
+# Python bytecode
+*.pyc
+__pycache__/
+
+# ROS specific
+*.egg-info/
+*.launch.py~
+
+# VSCode / IDE
+.vscode/
+.idea/
+*.swp
