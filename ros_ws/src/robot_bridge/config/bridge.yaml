@@ -23,6 +23,6 @@
         controller_topic: "/joint1/control"
         controller_msg_type: "safety_msgs/Control"
         mapping:
-          position: "linear.x"
-          velocity: "linear.y"
-          effort: "angular.z"
+          position_setpoint: "linear.x"
+          velocity_setpoint: "linear.y"
+          effort_setpoint: "angular.z"

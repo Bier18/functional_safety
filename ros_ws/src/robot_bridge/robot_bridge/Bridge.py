@@ -6,7 +6,6 @@ from ament_index_python.packages import get_package_share_directory
 from sensor_msgs.msg import JointState
 from .Robot import Robot
 from .Joint import Joint
-import sys
 
 
 class Bridge(Node):
@@ -66,7 +65,7 @@ class Bridge(Node):
                     10
                 )
 
-            joint_list.append(Joint(joint['name']))
+            joint_list.append(joint['name'])
 
         self.robot = Robot(self.config['/**']['robot_name'], joint_list)
 
@@ -89,9 +88,9 @@ class Bridge(Node):
         msg_type = self.import_msg(ctrl_conf['robot_msg_type'])
         robot_msg = msg_type()
 
-        setattr(robot_msg, mapping['position_setpoint'], msg.position_setpoint)
-        setattr(robot_msg, mapping['velocity_setpoint'], msg.velocity_setpoint)
-        setattr(robot_msg, mapping['effort_setpoint'], msg.effort_setpoint)
+        self.set_field(robot_msg, mapping['position_setpoint'], msg.position_setpoint)
+        self.set_field(robot_msg, mapping['velocity_setpoint'], msg.velocity_setpoint)
+        self.set_field(robot_msg, mapping['effort_setpoint'], msg.effort_setpoint)
 
         self.controller_publisher[name].publish(robot_msg)
 
@@ -99,12 +98,12 @@ class Bridge(Node):
         joint_conf = next(j for j in self.config['/**']['robot_joints'] if j['name'] == name)
         mapping = joint_conf['ros_topic']['mapping']
 
-        pos = getattr(msg, mapping['position'], None)
-        vel = getattr(msg, mapping['velocity'], None)
-        eff = getattr(msg, mapping['effort'], None)
+        pos = self.get_nested_field(msg, mapping['position'], None)
+        vel = self.get_nested_field(msg, mapping['velocity'], None)
+        eff = self.get_nested_field(msg, mapping['effort'], None)
 
-        joint = self.robot.get_joint(name)
-        joint.update_state(pos, vel, eff)
+        # aggiorna il digital twin
+        self.robot.update_joint(name,pos,vel,eff)
 
         # costruisci un JointState standardizzato
         js = JointState()
@@ -115,6 +114,21 @@ class Bridge(Node):
         js.effort = [eff] if eff is not None else []
 
         self.ros_publisher[name].publish(js)
+    
+    def set_field(self,obj, field_path, value):
+        parts = field_path.split('.')
+        for attr in parts[:-1]:
+            obj = getattr(obj, attr)
+        setattr(obj, parts[-1], value)
+    
+    def get_nested_field(self,obj, field_path, default=None):
+        fields = field_path.split('.')
+        for field in fields:
+            obj = getattr(obj, field, default)
+            if obj is default:
+                break
+        return obj
+
 
 def main(args=None):
     rclpy.init(args=args)
