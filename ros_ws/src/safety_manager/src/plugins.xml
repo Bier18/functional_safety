@@ -1,0 +1,14 @@
+<library path="safety_manager">
+  <class type="safety_manager::HGMode" base_class_type="safety_manager::SafetyTools">
+    <description>HG mode plugin.</description>
+  </class>
+  <class type="safety_manager::PFLMode" base_class_type="safety_manager::SafetyTools">
+    <description>PFL mode plugin.</description>
+  </class>
+  <class type="safety_manager::SRSMode" base_class_type="safety_manager::SafetyTools">
+    <description>SRS mode plugin.</description>
+  </class>
+  <class type="safety_manager::SSMMode" base_class_type="safety_manager::SafetyTools">
+    <description>SSM mode plugin.</description>
+  </class>
+</library>

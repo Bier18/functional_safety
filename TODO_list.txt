@@ -6,7 +6,7 @@ TODO LIST - ARCHITETTURA FUNCTIONAL SAFETY
 ----------------------------------------
 - X Creare package ROS 2 "robot_bridge" (Python)
 - X Configurazione YAML generica per robot a N giunti
-- [ ] Creare classi:
+- X Creare classi:
       - Joint
       - RobotInterface
       - BridgeNode (Nodo ROS 2)

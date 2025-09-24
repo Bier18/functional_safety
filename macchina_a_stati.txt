@@ -1,0 +1,33 @@
+Analisi dell'architettura proposta per il controllore di Functional Safety
+
+Descrizione dell'architettura:
+
+* La gestione dello stato del sistema è centralizzata in un nodo principale che contiene un oggetto di una classe "macchina a stati". Questo oggetto implementa la logica di transizione tra stati tramite uno switch/case basato su enumerativi.
+* Ogni stato della macchina è associato a un nodo dedicato che contiene un oggetto di una classe plugin.
+* I plugin implementano tutti i metodi di safety richiesti.
+* L'interazione con l'hardware è astratta tramite un nodo bridge che traduce i messaggi in ingresso e in uscita.
+* Durante la transizione tra stati, il nodo corrispondente allo stato precedente viene bloccato, evitando l'esecuzione concorrente di più nodi.
+
+Pro dell'architettura:
+
+1. **Modularità**: L'uso di plugin per ogni stato permette di separare chiaramente le responsabilità, facilitando la manutenzione e l'estendibilità.
+2. **Astrazione dell'hardware**: Il nodo bridge consente di modificare o sostituire l'hardware senza impattare direttamente la logica della macchina a stati o dei plugin.
+3. **Chiarezza nella gestione degli stati**: La macchina a stati centrale consente di avere un controllo chiaro e centralizzato delle transizioni tra stati.
+4. **Testabilità**: I plugin e la macchina a stati possono essere testati separatamente, anche in simulazione, senza necessità dell'hardware reale.
+5. **Scalabilità verticale**: È possibile aggiungere nuovi stati o nuovi comportamenti di safety implementando semplicemente nuovi plugin.
+6. **Controllo della concorrenza**: Bloccando i nodi non attivi durante le transizioni si riduce il rischio di conflitti tra più nodi in esecuzione contemporanea.
+
+Contro dell'architettura:
+
+1. **Overhead di comunicazione tra nodi**: Creare un nodo per ogni stato può introdurre un sovraccarico di comunicazione ROS non trascurabile, specialmente se il numero di stati cresce.
+2. **Complessità di sincronizzazione**: La gestione degli stati distribuiti tra più nodi può richiedere meccanismi di sincronizzazione e gestione dei tempi di risposta, soprattutto in sistemi di safety-critical.
+3. **Possibili duplicazioni di logica**: Alcuni metodi di safety potrebbero essere comuni a più stati, rischiando duplicazioni tra plugin. Questo può essere mitigato implementando i metodi comuni direttamente nella classe base dei plugin.
+4. **Difficoltà nella gestione delle transizioni veloci**: Se le transizioni tra stati devono essere rapide (hard real-time), passare messaggi tra nodi ROS può non essere sufficientemente performante.
+5. **Gestione degli errori distribuiti**: Errori nei plugin o nei nodi bridge devono essere gestiti correttamente per non compromettere la safety complessiva, aumentando la complessità del design.
+
+Conclusioni:
+
+* L'architettura è ben strutturata per progetti con alta modularità e testabilità, ideale se gli stati hanno logiche di safety indipendenti e l'hardware può cambiare.
+* Per applicazioni con vincoli di tempo stringenti o un gran numero di stati, potrebbe essere utile considerare la possibilità di consolidare più plugin in un unico nodo o usare una macchina a stati interna con chiamate dirette ai plugin per ridurre l'overhead.
+* Bisogna prevedere strategie di gestione degli errori centralizzata e logging dettagliato per garantire la functional safety.
+* La duplicazione dei metodi comuni tra plugin può essere risolta implementando tali metodi nella classe base dei plugin.
