@@ -1,4 +1,5 @@
-bool srs_request # 0 = robot in moto;  1 = attiva SRS;
+bool srs_request # 0 = disattiva SRS  1 = attiva SRS
+float64 min_distance # minima distanza di separazione, se non rispettata il robot si ferma 
 ---
 bool srs_response # 0 = richiesta rifiutata; 1 = richiesta accettata;
-string reason # motivazione per il rifiiuto della richiesta ("ok" se non ci sono problemi) 
+string reason # motivazione per il rifiuto della richiesta ("ok" se non ci sono problemi)
