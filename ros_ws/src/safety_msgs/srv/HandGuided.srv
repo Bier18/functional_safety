@@ -1,0 +1,4 @@
+bool hg_request # 0 = disattiva HG  1 = attiva HG 
+---
+bool hg_response # 0 = richiesta rifiutata; 1 = richiesta accettata;
+string reason # motivazione per il rifiuto della richiesta ("ok" se non ci sono problemi)

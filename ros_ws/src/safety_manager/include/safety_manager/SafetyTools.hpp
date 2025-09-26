@@ -1,8 +1,6 @@
-#ifndef FUNCTIONAL_SAFETY_HPP
-#define FUNCTIONAL_SAFETY_HPP
-#include <memory>
+#ifndef SAFETY_MANAGER_SAFETY_TOOLS_HPP
+#define SAFETY_MANAGER_SAFETY_TOOLS_HPP
 #include <rclcpp/rclcpp.hpp>
-#include "safety_manager/safety_states.hpp"
 
 
 namespace functional_safety
@@ -19,7 +17,7 @@ namespace functional_safety
       virtual void checkTorqueLimits() = 0; //controlla che le coppie dei giunti rimangano nei range
       virtual void monitorSensors() = 0; //Monitora l’integrità dei sensori
       virtual void diagnose() = 0; //restituisce un report sulla salute del sistema
-      virtual void safeMoveTo() = 0; //imposta un setpoint di posiione
+      virtual void safeMoveTo() = 0; //imposta un setpoint di posizione
       virtual void trajectoryCheck() = 0; // controlla che la traiettoria non ecceda i limiti di sicurezza
       virtual void ovverideControl() = 0; //permette il passaggio in modalità manuale
       virtual void logEvent() = 0; //registra anomalie
@@ -32,4 +30,4 @@ namespace functional_safety
   };
 }  // namespace functional_safety
 
-#endif  // FUNCTIONAL_SAFETY_HPP
+#endif  // SAFETY_MANAGER_SAFETY_TOOLS_HPP

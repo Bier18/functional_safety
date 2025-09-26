@@ -1,12 +1,8 @@
-#ifndef SRS_MODE_HPP
-#define SRS_MODE_HPP
-
-#include "functional_safety.hpp"
-#include <chrono>
-#include <thread>
+#include "safety_manager/SafetyTools.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "safety_msgs/srv/SafetyRatedStop.hpp"
-#include "safety_msgs/msg/safety_monitor_data.hpp"
+#include "safety_msgs/msg/SafetyMonitorData.hpp"
+#include "geometry_msgs/msg/point.hpp"
 
 
 namespace functional_safety
@@ -124,7 +120,6 @@ namespace functional_safety
       rclcpp::Node::SharedPtr node_;
       bool emergency_active_;
       rclcpp::Subscription<safety_msgs::msg::SafetyMonitorData>::SharedPtr human_presence_sub_;
-      rclcpp::Service<safety_msgs::srv::SafetyRatedStop>::SharedPtr srs_server_;
       rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr emergency_pub_;
       double min_distance_;
 
@@ -152,32 +147,9 @@ namespace functional_safety
             resume();
         }
       }
-
-      void manage_request(const std::shared_ptr<safety_msgs::srv::SafetyRatedStop::Request> request,
-                          std::shared_ptr<safety_msgs::srv::SafetyRatedStop::Response> response)
-      {
-        try{
-            if(request -> srs_request){
-                min_distance_ = request->min_distance;
-                human_presence_sub_ = node_ -> create_subscription<safety_msgs::msg::SafetyMonitorData>("SRS_topic",10,
-                                    std::bind(&SRSMode::humanDetectedCallback, this, std::placeholders::_1));
-                emergency_active_= false;
-                response -> srs_response = true;
-                response -> reason = "ok";
-            }else{
-                emergency_active_ = false;
-                human_presence_sub_.reset();
-                response -> srs_response = true;
-                response -> reason = "SRS Deactivated";
-            }
-            
-        }catch(const std::exception & e){
-            response -> srs_response = false;
-            response -> reason = e.what();
-        }
-      }
   };
 
 } // namespace functional_safety
 
-#endif // SRS_MODE_HPP
+#include <pluginlib/class_list_macros.hpp>
+PLUGINLIB_EXPORT_CLASS(functional_safety::SRSMode, functional_safety::SafetyTools)
