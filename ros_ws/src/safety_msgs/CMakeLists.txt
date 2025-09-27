@@ -22,7 +22,6 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/PowerForceLimiting.srv"
   "srv/SafetyRatedStop.srv"
   "srv/HandGuided.srv"
-  "action/PowerForceLimiting.action"
   DEPENDENCIES
     builtin_interfaces
     std_msgs

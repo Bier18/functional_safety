@@ -4,6 +4,9 @@
 #include <pluginlib/class_loader.hpp>
 #include <limits>
 #include <cmath>
+#include "safety_msgs/srv/handguided.hpp"
+#include "safety_msgs/srv/powerforcelimiting.hpp"
+#include "safety_msgs/srv/safetyratedstop.hpp"
 
 class StateMachine : public rclcpp::Node
 {

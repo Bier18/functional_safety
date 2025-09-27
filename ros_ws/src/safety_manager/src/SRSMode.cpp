@@ -1,7 +1,6 @@
 #include "safety_manager/SafetyTools.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "safety_msgs/srv/SafetyRatedStop.hpp"
-#include "safety_msgs/msg/SafetyMonitorData.hpp"
+#include "safety_msgs/msg/safetymonitordata.hpp"
 #include "geometry_msgs/msg/point.hpp"
 
 
@@ -10,14 +9,15 @@ namespace functional_safety
   class SRSMode : public SafetyTools
   {
   public:
-      SRSMode() : node_(nullptr), emergency_active_(false) {}
 
       void initialize(const rclcpp::Node::SharedPtr & node) override
       {
           node_ = node;
-          srs_server_ = node_ -> create_service<safety_msgs::srv::SafetyRatedStop>("srs_service",
-                                 std::bind(&SRSMode::manage_request, this, std::placeholders::_1, std::placeholders::_2));
           emergency_pub_ = node_->create_publisher<std_msgs::msg::Bool>("emergency_msg",10);
+          human_presence_sub_ = node->create_subscription<sensor_msgs::msg::SafetyMonitorData>(
+            "human_monitoring",10,std::bind(&SRSMode::humanDetectedCallback,this,std::placeholders _1)
+          );
+          emergency_active_ = false;
           RCLCPP_INFO(node_->get_logger(), "[SRSMode] Initialized SRS safety mode.");
       }
 
@@ -57,10 +57,6 @@ namespace functional_safety
         if(emergency_pub_){
             emergency_pub_.reset();
             RCLCPP_INFO(node_->get_logger(),"[SRSMode] Emergency publisher shut down.");
-        }
-        if(srs_server_){
-            srs_server_.reset();
-            RCLCPP_INFO(node_->get_logger(),"[SRSMode] SRS service shut down.");
         }
         RCLCPP_WARN(node_->get_logger(), "[SRSMode] Shutdown completed.");
       }

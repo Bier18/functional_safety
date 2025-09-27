@@ -11,8 +11,6 @@
       ros_topic:
         robot_topic: "/turtle1/pose"
         robot_msg_type: "turtlesim/msg/Pose"
-        controller_topic: "/joint1/state"
-        controller_msg_type: "sensor_msgs/JointState"
         mapping:
           position: "x"
           velocity: "linear_velocity"
