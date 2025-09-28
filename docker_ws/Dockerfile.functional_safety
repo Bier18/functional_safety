@@ -36,6 +36,15 @@ RUN apt update -y && apt install -y \
     ros-humble-gazebo-ros2-control
 
 # -----------------------------------------
+# ros2 necessary packages
+# -----------------------------------------
+RUN apt update -y && apt install -y \
+    ros-humble-geometry-msgs \
+    ros-humble-sensor-msgs \
+    ros-humble-std-msgs \
+    ros-humble-rclcpp
+
+# -----------------------------------------
 # Workspace setup
 # -----------------------------------------
 WORKDIR /root/ros_workspace

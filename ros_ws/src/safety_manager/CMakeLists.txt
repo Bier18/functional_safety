@@ -7,12 +7,62 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(safety_msgs REQUIRED)
+find_package(std_msgs)
+find_package(geometry_msgs)
 find_package(pluginlib REQUIRED)
+
+add_library(safety_manager SHARED
+  src/HGMode.cpp
+  src/PFLMode.cpp
+  src/SRSMode.cpp
+  src/SSMMode.cpp
+)
+
+target_include_directories(safety_manager PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+ament_target_dependencies(safety_manager
+  rclcpp
+  std_msgs
+  geometry_msgs
+  safety_msgs
+  pluginlib
+)
+
+install(TARGETS safety_manager
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
 pluginlib_export_plugin_description_file(safety_manager plugins.xml)
+
+add_executable(state_machine src/StateMachine.cpp)
+
+target_include_directories(state_machine PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+ament_target_dependencies(state_machine 
+  rclcpp 
+  safety_msgs 
+  pluginlib 
+  std_msgs 
+  geometry_msgs
+)
 
 install(
   DIRECTORY include/
   DESTINATION include
+)
+
+install(TARGETS state_machine
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 if(BUILD_TESTING)

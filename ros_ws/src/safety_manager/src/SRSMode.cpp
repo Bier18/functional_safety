@@ -1,12 +1,12 @@
 #include "safety_manager/SafetyTools.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "safety_msgs/msg/safetymonitordata.hpp"
+#include "safety_msgs/msg/safety_monitor_data.hpp"
 #include "geometry_msgs/msg/point.hpp"
-
+#include "std_msgs/msg/bool.hpp"
 
 namespace functional_safety
 {
-  class SRSMode : public SafetyTools
+  class SRSMode : public functional_safety::SafetyTools
   {
   public:
 
@@ -14,8 +14,8 @@ namespace functional_safety
       {
           node_ = node;
           emergency_pub_ = node_->create_publisher<std_msgs::msg::Bool>("emergency_msg",10);
-          human_presence_sub_ = node->create_subscription<sensor_msgs::msg::SafetyMonitorData>(
-            "human_monitoring",10,std::bind(&SRSMode::humanDetectedCallback,this,std::placeholders _1)
+          human_presence_sub_ = node->create_subscription<safety_msgs::msg::SafetyMonitorData>(
+            "human_monitoring",10,std::bind(&SRSMode::humanDetectedCallback,this,std::placeholders::_1)
           );
           emergency_active_ = false;
           RCLCPP_INFO(node_->get_logger(), "[SRSMode] Initialized SRS safety mode.");
@@ -61,10 +61,11 @@ namespace functional_safety
         RCLCPP_WARN(node_->get_logger(), "[SRSMode] Shutdown completed.");
       }
 
-      void checkVelocityLimits() override
+      void checkVelocityLimits(const std::shared_ptr<geometry_msgs::msg::TwistWithCovariance> /*msg*/) override
       {
           return;
       }
+
 
       void checkTorqueLimits() override
       {
@@ -112,6 +113,11 @@ namespace functional_safety
           return;
       }
 
+      void set_vmax(double /*velocity*/) override
+      {
+        return;
+      }
+
   private:
       rclcpp::Node::SharedPtr node_;
       bool emergency_active_;
@@ -128,8 +134,8 @@ namespace functional_safety
             return;
         }
 
-        geometry_msgs::Point op_pos = msg->operator_state.pose.pose.position;
-        geometry_msgs::Point tcp_pos = msg->robot_state.tcp_pose.pose.position;
+        geometry_msgs::msg::Point op_pos = msg->operator_state.pose.pose.position;
+        geometry_msgs::msg::Point tcp_pos = msg->robot_state.tcp_pose.pose.position;
         double dx = op_pos.x - tcp_pos.x;
         double dy = op_pos.y - tcp_pos.y;
         double dz = op_pos.z - tcp_pos.z;
@@ -138,7 +144,7 @@ namespace functional_safety
         {
             RCLCPP_WARN(node_->get_logger(), "[SRSMode] Human detected! Triggering SRS stop.");
             stop();
-        }else if (emergency_active_ && distance > min_distance){
+        }else if (emergency_active_ && distance > min_distance_){
             RCLCPP_WARN(node_->get_logger(), "[SRSMode] Human stepped away! Triggering SRS go.");
             resume();
         }

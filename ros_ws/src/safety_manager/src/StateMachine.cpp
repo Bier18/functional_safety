@@ -1,43 +1,50 @@
-#include "rclcpp/rclcpp.h"
+#include "rclcpp/rclcpp.hpp"
 #include "safety_manager/safety_states.hpp"
 #include "safety_manager/SafetyTools.hpp"
 #include <pluginlib/class_loader.hpp>
 #include <limits>
+#include <functional>
+#include <memory>
 #include <cmath>
-#include "safety_msgs/srv/handguided.hpp"
-#include "safety_msgs/srv/powerforcelimiting.hpp"
-#include "safety_msgs/srv/safetyratedstop.hpp"
+#include "safety_msgs/srv/hand_guided.hpp"
+#include "safety_msgs/srv/power_force_limiting.hpp"
+#include "safety_msgs/srv/safety_rated_stop.hpp"
 
 class StateMachine : public rclcpp::Node
 {
     public:
-        StateMachine() : Node("State Machine"){
+        StateMachine() : Node("state_machine"),
+                         state_loader("safety_manager", "functional_safety::SafetyTools") {}
+        void initialize(){
             current_state_ = functional_safety::SafetyState::SSM; //inizializza lo stato
 
             obj = state_loader.createSharedInstance("SRS"); //carica il pugin di default
-            obj->initialize(shared-from_this()); //inizializza il plugin
+            obj->initialize(std::static_pointer_cast<rclcpp::Node>(shared_from_this())); //inizializza il plugin
             
             //crea il server per il passaggio a SRS
-            srs_srv_ = this->create_service<safety_msgs::srv::SafetyRatedStop>("srs_request",10,
-                       std::bind(&StateMachine::srs_request,this,std::placeholder::_1));
+            srs_srv_ = this->create_service<safety_msgs::srv::SafetyRatedStop>("srs_request",
+                       std::bind(&StateMachine::srs_request,this,
+                                std::placeholders::_1,std::placeholders::_2));
             
             //crea il server per il passaggio a PFL
-            pfl_srv_ = this->create_service<safety_msgs::srv::PowerForceLimiting>("pfl_request",10,
-                       std::bind(&StateMachine::pfl_request,this,std::placeholder::_1));
+            pfl_srv_ = this->create_service<safety_msgs::srv::PowerForceLimiting>("pfl_request",
+                       std::bind(&StateMachine::pfl_request,this,
+                                 std::placeholders::_1, std::placeholders::_2));
 
             //crea il server per il passaggio a HG
-            hg_srv_ = this->create_service<safety_msgs::srv::HandGuided>("hg_request",10,
-                      std::bind(&StateMachine::hg_request,this,std::placeholder::_1));
+            hg_srv_ = this->create_service<safety_msgs::srv::HandGuided>("hg_request",
+                      std::bind(&StateMachine::hg_request,this,
+                                std::placeholders::_1, std::placeholders::_2));
         }
     private:
         rclcpp::Service<safety_msgs::srv::SafetyRatedStop>::SharedPtr srs_srv_; //servizio per il passaggio a SRS
         rclcpp::Service<safety_msgs::srv::PowerForceLimiting>::SharedPtr pfl_srv_; //server per il passaggio a PF
         rclcpp::Service<safety_msgs::srv::HandGuided>::SharedPtr hg_srv_; //server per il passaggio ad HG
-        functional_safety::Safetystates current_state_; //memorizza lo stato corrente
+        functional_safety::SafetyState current_state_; //memorizza lo stato corrente
         //collegamento con i plugin
-        pluginlib::ClassLoader<functional_safety::SafetyTools> state_loader("functional_safety", 
-                                                                            "functional_safety::SafetyTools");
+        pluginlib::ClassLoader<functional_safety::SafetyTools> state_loader;
         std::shared_ptr<functional_safety::SafetyTools> obj;
+        double vmax;
         
         //callback per la gesitone della richiesta SRS
         void srs_request(const std::shared_ptr<safety_msgs::srv::SafetyRatedStop::Request> request,
@@ -49,7 +56,7 @@ class StateMachine : public rclcpp::Node
                         //entra in SRS
                         change_state("SRS");
                         response->srs_response = true; //accetta
-                        response->message = "ok";
+                        response->reason = "ok";
                     }else{ 
                         response->srs_response = false; //rifiuta
                         response->reason = "SRS mode already active"; //spiega il motivo del rifiuto
@@ -87,17 +94,19 @@ class StateMachine : public rclcpp::Node
                         change_state("PFL");
                         double vmax;
                         if(request->use_force){
-                            force_max = request->force_max;
-                            total_mass = request->total_mass;
-                            k = request->k;
+                            double force_max = request->force_max;
+                            double total_mass = request->total_mass;
+                            double k = request->k;
                             vmax = force_max/std::sqrt(total_mass*k);
+                            obj->set_vmax(vmax);
                         }
                         else{
-                            pressure_max = request->pressure_max;
-                            contact_area = request->contact_area;
-                            total_mass = request->total_mass;
-                            k = request->k;
+                            double pressure_max = request->pressure_max;
+                            double contact_area = request->contact_area;
+                            double total_mass = request->total_mass;
+                            double k = request->k;
                             vmax = pressure_max*contact_area/std::sqrt(total_mass*k);
+                            obj->set_vmax(vmax);
                         }
                         response->success = true; //accetta
                         response->message = "PFL mode active";
@@ -105,12 +114,12 @@ class StateMachine : public rclcpp::Node
                     }else{ 
                         response->success = false; //rifiuta
                         response->message = "PFL mode already active"; //spiega il motivo del rifiuto
-                        response->vmax = std::numeric_limits<double>::quiet_NaN(""); //non ritorna un valore per la velocità
+                        response->vmax = std::numeric_limits<double>::quiet_NaN(); //non ritorna un valore per la velocità
                     }
                 }catch(pluginlib::PluginlibException& ex){
                     response->success = false; //rifiuta
                     response->message = ex.what();
-                    response->vmax = std::numeric_limits<double>::quiet_NaN("");
+                    response->vmax = std::numeric_limits<double>::quiet_NaN();
                 }
             }else{ //se richiedo la disattivazione
                 try{
@@ -119,16 +128,16 @@ class StateMachine : public rclcpp::Node
                         change_state("SSM");
                         response->success = true; //accetta
                         response->message = "PFL mode active";
-                        response->vmax = std::numeric_limits<double>::quiet_NaN("");
+                        response->vmax = std::numeric_limits<double>::quiet_NaN();
                     }else{
                         response->success = false; //rifiuta
                         response->message = "PFL mode not active"; //spiega il motivo del rifiuto
-                        response->vmax = std::numeric_limits<double>::quiet_NaN(""); //non ritorna un valore di velocità
+                        response->vmax = std::numeric_limits<double>::quiet_NaN(); //non ritorna un valore di velocità
                     }
                 }catch(pluginlib::PluginlibException& ex){
                     response->success = false; //rifiuta
                     response->message = ex.what();
-                    response->vmax = std::numeric_limits<double>::quiet_NaN("");
+                    response->vmax = std::numeric_limits<double>::quiet_NaN();
                 }
             }
         }
@@ -174,7 +183,7 @@ class StateMachine : public rclcpp::Node
         void change_state(const std::string &state){
             obj->shutdown(); //resetta lo stato precedente precedente
             obj = state_loader.createSharedInstance(state); //carica il plugin
-            obj->initialize(shared_from_this()); //inizializza il plugin
+            obj->initialize(std::static_pointer_cast<rclcpp::Node>(shared_from_this())); //inizializza il plugin
             //aggiorna current state
             if(state == "SSM"){
                 current_state_ = functional_safety::SafetyState::SSM;
@@ -192,12 +201,14 @@ class StateMachine : public rclcpp::Node
                 RCLCPP_WARN(this->get_logger(), "Unknown state requested: %s", state.c_str());
             }
         }
-}
+};
 
 int main(int argc, char* argv[])
 {
     rclcpp::init(argc,argv);
-    rclcpp::spin(std::make_shared<StateMachine>());
+    auto node = std::make_shared<StateMachine>();
+    node->initialize();
+    rclcpp::spin(node);
     rclcpp::shutdown();
     return 0;
 }
