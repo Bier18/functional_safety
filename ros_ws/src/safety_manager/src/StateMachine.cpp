@@ -18,7 +18,7 @@ class StateMachine : public rclcpp::Node
         void initialize(){
             current_state_ = functional_safety::SafetyState::SSM; //inizializza lo stato
 
-            obj = state_loader.createSharedInstance("SRS"); //carica il pugin di default
+            obj = state_loader.createSharedInstance("SSM"); //carica il pugin di default
             obj->initialize(std::static_pointer_cast<rclcpp::Node>(shared_from_this())); //inizializza il plugin
             
             //crea il server per il passaggio a SRS
@@ -55,6 +55,7 @@ class StateMachine : public rclcpp::Node
                     if(current_state_ != functional_safety::SafetyState::SRS){ // e non sono già in SRS
                         //entra in SRS
                         change_state("SRS");
+                        obj->set_safety_params(request->min_distance);
                         response->srs_response = true; //accetta
                         response->reason = "ok";
                     }else{ 
@@ -98,7 +99,7 @@ class StateMachine : public rclcpp::Node
                             double total_mass = request->total_mass;
                             double k = request->k;
                             vmax = force_max/std::sqrt(total_mass*k);
-                            obj->set_vmax(vmax);
+                            obj->set_safety_params(vmax);
                         }
                         else{
                             double pressure_max = request->pressure_max;
@@ -106,7 +107,7 @@ class StateMachine : public rclcpp::Node
                             double total_mass = request->total_mass;
                             double k = request->k;
                             vmax = pressure_max*contact_area/std::sqrt(total_mass*k);
-                            obj->set_vmax(vmax);
+                            obj->set_safety_params(vmax);
                         }
                         response->success = true; //accetta
                         response->message = "PFL mode active";

@@ -25,7 +25,7 @@ namespace functional_safety
       virtual void logEvent() = 0; //registra anomalie
       virtual void alertOperator() = 0; //warning all'operatore
       virtual void getFaultHistory() = 0; //lista dei fault rilevati nel tempo
-      virtual void set_vmax(double velocity) = 0; //imposta la vmax
+      virtual void set_safety_params(double param) = 0; //imposta la vmax
       virtual ~SafetyTools(){}
 
     protected:

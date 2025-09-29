@@ -124,8 +124,8 @@ namespace functional_safety
           return;
       }
 
-      void set_vmax(double velocity) override{
-        vmax = velocity;
+      void set_safety_params(double param) override{
+        vmax = param;
       }
 
   private:

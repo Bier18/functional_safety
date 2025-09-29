@@ -1,8 +1,9 @@
 #include "safety_manager/SafetyTools.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "safety_msgs/msg/safety_monitor_data.hpp"
-#include "geometry_msgs/msg/point.hpp"
+#include "safety_msgs/msg/positions.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "geometry_msgs/msg/twist_with_covariance.hpp"
+#include <cmath>
 
 namespace functional_safety
 {
@@ -14,7 +15,7 @@ namespace functional_safety
       {
           node_ = node;
           emergency_pub_ = node_->create_publisher<std_msgs::msg::Bool>("emergency_msg",10);
-          human_presence_sub_ = node->create_subscription<safety_msgs::msg::SafetyMonitorData>(
+          human_presence_sub_ = node->create_subscription<safety_msgs::msg::Positions>(
             "human_monitoring",10,std::bind(&SRSMode::humanDetectedCallback,this,std::placeholders::_1)
           );
           emergency_active_ = false;
@@ -113,38 +114,58 @@ namespace functional_safety
           return;
       }
 
-      void set_vmax(double /*velocity*/) override
+      void set_safety_params(double param) override
       {
-        return;
+        min_distance_ = param;
       }
 
   private:
       rclcpp::Node::SharedPtr node_;
       bool emergency_active_;
-      rclcpp::Subscription<safety_msgs::msg::SafetyMonitorData>::SharedPtr human_presence_sub_;
+      rclcpp::Subscription<safety_msgs::msg::Positions>::SharedPtr human_presence_sub_;
       rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr emergency_pub_;
       double min_distance_;
 
-      void humanDetectedCallback(const safety_msgs::msg::SafetyMonitorData::SharedPtr msg)
+      void humanDetectedCallback(const safety_msgs::msg::Positions::SharedPtr msg)
       {
-        if(!msg->valid || !msg->operator_state.valid){
-            RCLCPP_WARN(node_->get_logger(), "[SRSMode] Not valid data! Triggering SRS stop.");
-            stop();
-            alertOperator();
-            return;
+        //robot pose with uncertainty
+        double rx = msg->robot_pose.pose.position.x;
+        double ry = msg->robot_pose.pose.position.y;
+        double rz = msg->robot_pose.pose.position.z;
+        double srx = msg->robot_pose.covariance[0];
+        double sry = msg->robot_pose.covariance[7];
+        double srz = msg->robot_pose.covariance[14];
+        //operator pose with uncertainty
+        double ox = msg->op_pose.pose.position.x;
+        double oy = msg->op_pose.pose.position.y;
+        double oz = msg->op_pose.pose.position.z;
+        double sox = msg->op_pose.covariance[0];
+        double soy = msg->op_pose.covariance[7];
+        double soz = msg->op_pose.covariance[14];
+        //poses modules with uncertainty
+        double r_pose = std::sqrt(rx*rx + ry*ry + rz*rz);
+        double o_pose = std::sqrt(ox*ox + oy*oy + oz*oz);
+        double sigma_o = 0.0;
+        double sigma_r = 0.0;
+        if(r_pose > 1e-6){
+            sigma_r = std::sqrt((rx*rx*srx + ry*ry*sry + rz*rz*srz)/(r_pose*r_pose));
         }
-
-        geometry_msgs::msg::Point op_pos = msg->operator_state.pose.pose.position;
-        geometry_msgs::msg::Point tcp_pos = msg->robot_state.tcp_pose.pose.position;
-        double dx = op_pos.x - tcp_pos.x;
-        double dy = op_pos.y - tcp_pos.y;
-        double dz = op_pos.z - tcp_pos.z;
-        double distance = std::sqrt(dx*dx + dy*dy + dz*dz);
-        if (!emergency_active_ && distance <= min_distance_)
+        if(o_pose > 1e-6){
+            sigma_o = std::sqrt((ox*ox*sox + oy*oy*soy + oz*oz*soz)/(o_pose*o_pose));
+        }
+        //distance with uncertainty
+        double rob_op_distance_x = rx-ox;
+        double rob_op_distance_y = ry-oy;
+        double rob_op_distance_z = rz-oz;
+        double rob_op_distance = std::sqrt(rob_op_distance_x*rob_op_distance_x + rob_op_distance_y*rob_op_distance_y + rob_op_distance_z*rob_op_distance_z);
+        //worst case distance
+        double k = 2.0; //confidence level
+        rob_op_distance = rob_op_distance + k * (sigma_o + sigma_r);
+        if (!emergency_active_ && rob_op_distance <= min_distance_)
         {
             RCLCPP_WARN(node_->get_logger(), "[SRSMode] Human detected! Triggering SRS stop.");
             stop();
-        }else if (emergency_active_ && distance > min_distance_){
+        }else if (emergency_active_ && rob_op_distance > min_distance_){
             RCLCPP_WARN(node_->get_logger(), "[SRSMode] Human stepped away! Triggering SRS go.");
             resume();
         }

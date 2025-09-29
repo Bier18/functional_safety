@@ -14,10 +14,10 @@ find_package(action_msgs REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
-  "msg/OperatorState.msg"
+  "msg/Positions.msg"
   "msg/RobotState.msg"
-  "msg/SafetyParams.msg"
-  "msg/SafetyMonitorData.msg"
+  "msg/OperatorState.msg"
+  "msg/SSM.msg"
   "msg/Control.msg"
   "srv/PowerForceLimiting.srv"
   "srv/SafetyRatedStop.srv"
