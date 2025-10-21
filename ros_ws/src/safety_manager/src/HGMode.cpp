@@ -16,14 +16,14 @@ namespace functional_safety{
                                 std::bind(&HGMode::hg_manager,this,std::placeholders::_1));
                 manual_control_ = false;
                 min_distance_ = 0.0;
-                RCLCPP_INFO(node_->get_logger(),"[HG] Succesfully Enabled")
+                RCLCPP_INFO(node_->get_logger(),"[HG] Succesfully Enabled");
             }
 
             void stop() override {
                 std_msgs::msg::Bool msg;
                 msg.data = true;
                 stop_signal_pub_->publish(msg);
-                RCLCPP_WARN(node_->get_logger(),"[HG] Detected Human, stopping robot")
+                RCLCPP_WARN(node_->get_logger(),"[HG] Detected Human, stopping robot");
             } 
 
             void pause() override {return;} 
@@ -32,7 +32,7 @@ namespace functional_safety{
                 std_msgs::msg::Bool msg;
                 msg.data = false;
                 stop_signal_pub_->publish(msg);
-                RCLCPP_WARN(node_->get_logger(),"[HG] Resuming robot functionalities")
+                RCLCPP_WARN(node_->get_logger(),"[HG] Resuming robot functionalities");
             } 
 
             void shutdown() override {
@@ -137,4 +137,5 @@ namespace functional_safety{
 }
 
 #include <pluginlib/class_list_macros.hpp>
+
 PLUGINLIB_EXPORT_CLASS(functional_safety::HGMode, functional_safety::SafetyTools)
