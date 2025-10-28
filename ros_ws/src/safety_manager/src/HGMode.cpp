@@ -3,6 +3,7 @@
 #include "std_msgs/msg/bool.hpp"
 #include "safety_msgs/msg/positions.hpp"
 #include "geometry_msgs/msg/twist_with_covariance.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include <cmath>
 
 namespace functional_safety{
@@ -10,41 +11,64 @@ namespace functional_safety{
         public:
             void initialize(const rclcpp::Node::SharedPtr &node){
                 node_ = node;
-                stop_signal_pub_ = node_->create_publisher<std_msgs::msg::Bool>("/hg_stop",10);
-                override_control_pub_ = node_->create_publisher<std_msgs::msg::Bool>("/override_control",10);
-                poses_sub_ = node_->create_subscription<safety_msgs::msg::Positions>("/tcp_pose",10,
+                stop_signal_srv_ = node_->create_client<std_srvs::srv::SetBool>("/stop_robot");
+                override_control_srv_ = node_->create_client<std_srvs::srv::SetBool>("/override_control");
+                poses_sub_ = node_->create_subscription<safety_msgs::msg::Positions>("/tcp_op_pose",10,
                                 std::bind(&HGMode::hg_manager,this,std::placeholders::_1));
                 manual_control_ = false;
                 min_distance_ = 0.0;
+                stop_= false;
                 RCLCPP_INFO(node_->get_logger(),"[HG] Succesfully Enabled");
             }
 
             void stop() override {
-                std_msgs::msg::Bool msg;
-                msg.data = true;
-                stop_signal_pub_->publish(msg);
-                RCLCPP_WARN(node_->get_logger(),"[HG] Detected Human, stopping robot");
+                stop_ = true;
+                RCLCPP_WARN(node_->get_logger(), "[HG] Stopping robot");
+                //crea il messaggio di stop e lo pubblica
+                auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+                request->data = true;
+                // gestisce la risposta
+                auto result = stop_signal_srv_->async_send_request(request,
+                    [this](rclcpp::Client<std_srvs::srv::SetBool>::SharedFuture result){
+                    if(result.valid()){
+                        RCLCPP_INFO(node_->get_logger(), "%s", result.get()->message.c_str());
+                    }
+                    else{
+                        RCLCPP_ERROR(node_->get_logger(), "Failed to call service");
+                    }
+                });
             } 
 
             void pause() override {return;} 
 
             void resume() override {
-                std_msgs::msg::Bool msg;
-                msg.data = false;
-                stop_signal_pub_->publish(msg);
-                RCLCPP_WARN(node_->get_logger(),"[HG] Resuming robot functionalities");
+                stop_ = false;
+                RCLCPP_WARN(node_->get_logger(), "[HG] Moving robot");
+                //crea il messaggio di stop e lo pubblica
+                auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+                request->data = false;
+                // gestisce la risposta
+                auto result = stop_signal_srv_->async_send_request(request,
+                    [this](rclcpp::Client<std_srvs::srv::SetBool>::SharedFuture result){
+                    if(result.valid()){
+                        RCLCPP_INFO(node_->get_logger(), "%s", result.get()->message.c_str());
+                    }
+                    else{
+                        RCLCPP_ERROR(node_->get_logger(), "Failed to call service");
+                    }
+                });
             } 
 
             void shutdown() override {
                 manual_control_ = false;
 
-                if(stop_signal_pub_)
+                if(stop_signal_srv_)
                 {
-                    stop_signal_pub_.reset();
-                    RCLCPP_INFO(node_->get_logger(), "[HG] Stop signal publisher shut down.");
+                    stop_signal_srv_.reset();
+                    RCLCPP_INFO(node_->get_logger(), "[HG] Stop signal server shut down.");
                 }
-                if(override_control_pub_){
-                    override_control_pub_.reset();
+                if(override_control_srv_){
+                    override_control_srv_.reset();
                     RCLCPP_INFO(node_->get_logger(),"[HG] Override control publisher shut down.");
                 }
                 RCLCPP_WARN(node_->get_logger(), "[HG] Shutdown completed.");
@@ -65,9 +89,19 @@ namespace functional_safety{
             void overrideControl() override {
                 stop();
                 manual_control_ = !manual_control_;
-                std_msgs::msg::Bool msg;
-                msg.data = manual_control_;
-                override_control_pub_->publish(msg);
+                //crea il messaggio del cambio di controllo
+                auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+                request->data = manual_control_;
+                // gestisce la risposta
+                auto result = override_control_srv_->async_send_request(request,
+                    [this](rclcpp::Client<std_srvs::srv::SetBool>::SharedFuture result){
+                    if(result.valid()){
+                        RCLCPP_INFO(node_->get_logger(), "%s", result.get()->message.c_str());
+                    }
+                    else{
+                        RCLCPP_ERROR(node_->get_logger(), "Failed to call service");
+                    }
+                });
             }
             
             void logEvent() override {return;}
@@ -80,10 +114,11 @@ namespace functional_safety{
         
         private:
             rclcpp::Node::SharedPtr node_;
-            rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr stop_signal_pub_;
-            rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr override_control_pub_;
+            rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr stop_signal_srv_;
+            rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr override_control_srv_;
             rclcpp::Subscription<safety_msgs::msg::Positions>::SharedPtr poses_sub_;
             bool manual_control_;
+            bool stop_;
             double min_distance_;
 
             void hg_manager(const std::shared_ptr<safety_msgs::msg::Positions> msg){
@@ -129,7 +164,7 @@ namespace functional_safety{
                     RCLCPP_INFO(node_->get_logger(),"[HG] Disabling manual override");
                     overrideControl();
                 }
-                else{
+                else if(stop_){
                     resume();
                 }
             }

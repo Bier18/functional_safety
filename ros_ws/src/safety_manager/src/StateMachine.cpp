@@ -66,7 +66,7 @@ class StateMachine : public rclcpp::Node
                     response->srs_response = false; //rifiuta
                     response->reason = ex.what();
                 }
-            }else{ //se richiedo la disattivazione
+            }else{ 
                 try{
                     if(current_state_ == functional_safety::SafetyState::SRS){ // e sono in SRS
                         // ritorna allo stato di default
@@ -152,6 +152,7 @@ class StateMachine : public rclcpp::Node
                     if(current_state_ != functional_safety::SafetyState::HG){ // e non sono già in HG
                         //entra in HG
                         change_state("HG");
+                        obj->set_safety_params(request->min_distance);
                         response->hg_response = true; //accetta
                         response->reason = "ok";
                     }else{ 

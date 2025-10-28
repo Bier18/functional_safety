@@ -3,6 +3,7 @@
 #include "safety_msgs/msg/positions.hpp"
 #include "std_msgs/msg/bool.hpp"
 #include "geometry_msgs/msg/twist_with_covariance.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include <cmath>
 
 namespace functional_safety
@@ -14,22 +15,31 @@ namespace functional_safety
       void initialize(const rclcpp::Node::SharedPtr & node) override
       {
           node_ = node;
-          emergency_pub_ = node_->create_publisher<std_msgs::msg::Bool>("emergency_msg",10);
+          emergency_srv_ = node_->create_client<std_srvs::srv::SetBool>("/stop_robot");
           human_presence_sub_ = node->create_subscription<safety_msgs::msg::Positions>(
             "human_monitoring",10,std::bind(&SRSMode::humanDetectedCallback,this,std::placeholders::_1)
           );
           emergency_active_ = false;
-          RCLCPP_INFO(node_->get_logger(), "[SRSMode] Initialized SRS safety mode.");
+          RCLCPP_INFO(node_->get_logger(), "[SRS] Initialized SRS safety mode.");
       }
 
       void stop() override
       {
-        RCLCPP_WARN(node_->get_logger(), "[SRSMode] Emergency Stop activated!");
+        RCLCPP_WARN(node_->get_logger(), "[SRS] Emergency Stop activated!");
         emergency_active_ = true;
         //crea il messaggio di stop e lo pubblica
-        std_msgs::msg::Bool stop_msg;
-        stop_msg.data = true;
-        emergency_pub_->publish(stop_msg);
+        auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+        request->data = emergency_active_;
+        // gestisce la risposta
+        auto result = emergency_srv_->async_send_request(request,
+            [this](rclcpp::Client<std_srvs::srv::SetBool>::SharedFuture result){
+            if(result.valid()){
+                RCLCPP_INFO(node_->get_logger(), "%s", result.get()->message.c_str());
+            }
+            else{
+                RCLCPP_ERROR(node_->get_logger(), "Failed to call service");
+            }
+        });
       }
 
       void pause() override
@@ -39,11 +49,21 @@ namespace functional_safety
 
       void resume() override
       {
+        RCLCPP_WARN(node_->get_logger(), "[SRS] Emergency Stop deactivated!");
         emergency_active_ = false;
-        //crea il messaggio di ripartenza e lo pubblica
-        std_msgs::msg::Bool go_msg;
-        go_msg.data = true;
-        emergency_pub_->publish(go_msg);
+        //crea il messaggio di stop e lo pubblica
+        auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+        request->data = emergency_active_;
+        // gestisce la risposta
+        auto result = emergency_srv_->async_send_request(request,
+            [this](rclcpp::Client<std_srvs::srv::SetBool>::SharedFuture result){
+            if(result.valid()){
+                RCLCPP_INFO(node_->get_logger(), "%s", result.get()->message.c_str());
+            }
+            else{
+                RCLCPP_ERROR(node_->get_logger(), "Failed to call service");
+            }
+        });
       }
 
       void shutdown() override
@@ -53,13 +73,13 @@ namespace functional_safety
         if(human_presence_sub_)
         {
             human_presence_sub_.reset();
-            RCLCPP_INFO(node_->get_logger(), "[SRSMode] Human presence subscription shut down.");
+            RCLCPP_INFO(node_->get_logger(), "[SRS] Human presence subscription shut down.");
         }
-        if(emergency_pub_){
-            emergency_pub_.reset();
-            RCLCPP_INFO(node_->get_logger(),"[SRSMode] Emergency publisher shut down.");
+        if(emergency_srv_){
+            emergency_srv_.reset();
+            RCLCPP_INFO(node_->get_logger(),"[SRS] Emergency server shut down.");
         }
-        RCLCPP_WARN(node_->get_logger(), "[SRSMode] Shutdown completed.");
+        RCLCPP_WARN(node_->get_logger(), "[SRS] Shutdown completed.");
       }
 
       void checkVelocityLimits(const std::shared_ptr<geometry_msgs::msg::TwistWithCovariance> /*msg*/) override
@@ -105,7 +125,7 @@ namespace functional_safety
 
       void alertOperator() override
       {
-          RCLCPP_WARN(node_->get_logger(), "[SRSMode] Operator alert triggered!");
+          RCLCPP_WARN(node_->get_logger(), "[SRS] Operator alert triggered!");
           return;
       }
 
@@ -123,7 +143,7 @@ namespace functional_safety
       rclcpp::Node::SharedPtr node_;
       bool emergency_active_;
       rclcpp::Subscription<safety_msgs::msg::Positions>::SharedPtr human_presence_sub_;
-      rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr emergency_pub_;
+      rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr emergency_srv_;
       double min_distance_;
 
       void humanDetectedCallback(const safety_msgs::msg::Positions::SharedPtr msg)

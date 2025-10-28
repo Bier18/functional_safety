@@ -1,8 +1,9 @@
 #include <rclcpp/rclcpp.hpp>
 #include "safety_manager/SafetyTools.hpp"
 #include "std_msgs/msg/bool.hpp"
-#include "safety_msgs/msg/SSM.hpp"
+#include "safety_msgs/msg/ssm.hpp"
 #include "geometry_msgs/msg/twist_with_covariance.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -15,23 +16,45 @@ namespace functional_safety
         node_ = node;
         ssm_sub_ = node_->create_subscription<safety_msgs::msg::SSM>("/ssm",10,
                    std::bind(&SSMMode::spider_sense,this,std::placeholders::_1));
-        stop_pub_ = node_->create_publisher<std_msgs::msg::Bool>("/ssm_stop",10);
+        stop_srv_ = node_->create_client<std_srvs::srv::SetBool>("/stop_robot");
         stop_ = false;
         min_distance = 0.5;
         RCLCPP_INFO(node_->get_logger(),"[SSM] Succesfully enabled");
       }
       void stop() override {
-        RCLCPP_WARN(node_->get_logger(),"[WARN] Operator too close");
-        std_msgs::msg::Bool msg;
-        msg.data = stop_;
-        stop_pub_->publish(msg);
+        stop_ = true;
+        RCLCPP_WARN(node_->get_logger(), "[SSM] Emergency Stop activated!");
+        //crea il messaggio di stop e lo pubblica
+        auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+        request->data = stop_;
+        // gestisce la risposta
+        auto result = stop_srv_->async_send_request(request,
+            [this](rclcpp::Client<std_srvs::srv::SetBool>::SharedFuture result){
+            if(result.valid()){
+                RCLCPP_INFO(node_->get_logger(), "%s", result.get()->message.c_str());
+            }
+            else{
+                RCLCPP_ERROR(node_->get_logger(), "Failed to call service");
+            }
+        });
       }
       void pause() override {return;}
       void resume() override {
-        RCLCPP_WARN(node_->get_logger(),"[WARN] Operator moved away");
-        std_msgs::msg::Bool msg;
-        msg.data = stop_;
-        stop_pub_->publish(msg);
+        RCLCPP_WARN(node_->get_logger(), "[SRS] Emergency Stop activated!");
+        stop_ = false;
+        //crea il messaggio di stop e lo pubblica
+        auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+        request->data = stop_;
+        // gestisce la risposta
+        auto result = stop_srv_->async_send_request(request,
+            [this](rclcpp::Client<std_srvs::srv::SetBool>::SharedFuture result){
+            if(result.valid()){
+                RCLCPP_INFO(node_->get_logger(), "%s", result.get()->message.c_str());
+            }
+            else{
+                RCLCPP_ERROR(node_->get_logger(), "Failed to call service");
+            }
+        });
       }
       void shutdown() override {return;}
       void checkVelocityLimits(const std::shared_ptr<geometry_msgs::msg::TwistWithCovariance> /*msg*/) override {return;} 
@@ -49,7 +72,7 @@ namespace functional_safety
     private:
       rclcpp::Node::SharedPtr node_;
       rclcpp::Subscription<safety_msgs::msg::SSM>::SharedPtr ssm_sub_;
-      rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr stop_pub_;
+      rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr stop_srv_;
       double min_distance;
       bool stop_;
 
@@ -140,7 +163,7 @@ namespace functional_safety
             r_velocity = std::max(0.0,r_velocity + k*sr_velocity);
           }
         }else{
-          r_velocity = msg->tcp_to_op_max_speed; //according to the standard the standard
+          r_velocity = msg->tcp_to_op_max_speed; //according to the standard
         }
         //find minimum distance
         double Sh = op_velocity*(reaction_time + stop_time);

@@ -12,6 +12,7 @@
   <depend>pluginlib</depend>
   <depend>geometry_msgs</depend>
   <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
   <depend>safety_msgs</depend>
   <depend>rclcpp</depend>
 

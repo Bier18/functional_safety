@@ -2,6 +2,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/twist_with_covariance.hpp"
 #include "std_msgs/msg/bool.hpp"
+#include "std_srvs/srv/set_bool.hpp"
 #include <cmath>
 
 
@@ -17,16 +18,26 @@ namespace functional_safety
           velocity_feedback_ = node_->create_subscription<geometry_msgs::msg::TwistWithCovariance>(
             "/velocity_feedback",10,std::bind(&PFLMode::checkVelocityLimits,this,std::placeholders::_1)
           );
-          emergency_pub_ = node_->create_publisher<std_msgs::msg::Bool>(
-            "/emergency_stop",10);
+          emergency_srv_ = node_->create_client<std_srvs::srv::SetBool>("/stop_robot");
           RCLCPP_INFO(node_->get_logger(), "[PFL] Initialized PFL safety mode.");
       }
 
       void stop() override
       {
-        std_msgs::msg::Bool msg;
-        msg.data = true;
-        emergency_pub_->publish(msg);
+        RCLCPP_WARN(node_->get_logger(), "[PFL] Emergency Stop activated!");
+        //crea il messaggio di stop e lo pubblica
+        auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+        request->data = true;
+        // gestisce la risposta
+        auto result = emergency_srv_->async_send_request(request,
+            [this](rclcpp::Client<std_srvs::srv::SetBool>::SharedFuture result){
+            if(result.valid()){
+                RCLCPP_INFO(node_->get_logger(), "%s", result.get()->message.c_str());
+            }
+            else{
+                RCLCPP_ERROR(node_->get_logger(), "Failed to call service");
+            }
+        });
       }
 
       void pause() override
@@ -47,8 +58,8 @@ namespace functional_safety
             velocity_feedback_.reset();
             RCLCPP_INFO(node_->get_logger(), "[PFL] Velocity feedback subscription shut down.");
         }
-        if(emergency_pub_){
-            emergency_pub_.reset();
+        if(emergency_srv_){
+            emergency_srv_.reset();
             RCLCPP_INFO(node_->get_logger(),"[PFL] Emergency publisher shut down.");
         }
         RCLCPP_WARN(node_->get_logger(), "[PFL] Shutdown completed.");
@@ -131,7 +142,7 @@ namespace functional_safety
   private:
       rclcpp::Node::SharedPtr node_;
       rclcpp::Subscription<geometry_msgs::msg::TwistWithCovariance>::SharedPtr velocity_feedback_;
-      rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr emergency_pub_;
+      rclcpp::Client<std_srvs::srv::SetBool>::SharedPtr emergency_srv_;
       double vmax = 1.0;
   };
 }// namespace functional_safety

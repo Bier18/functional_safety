@@ -9,8 +9,9 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(safety_msgs REQUIRED)
-find_package(std_msgs)
-find_package(geometry_msgs)
+find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(pluginlib REQUIRED)
 
 add_library(safety_manager SHARED
@@ -28,6 +29,7 @@ target_include_directories(safety_manager PUBLIC
 ament_target_dependencies(safety_manager
   rclcpp
   std_msgs
+  std_srvs
   geometry_msgs
   safety_msgs
   pluginlib
