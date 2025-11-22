@@ -10,8 +10,11 @@ from moveit_msgs.msg import DisplayTrajectory, CollisionObject
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from tf2_ros import TransformException
-from safety_msgs.msg import Positions, SSM
+from safety_msgs.msg import Positions
 from geometry_msgs.msg import Pose
+from controller_manager_msgs.srv import SwitchController
+from std_msgs.msg import Bool, String
+import random
 
 class Bridge(Node) :
     def __init__(self):
@@ -26,23 +29,19 @@ class Bridge(Node) :
         #publishers
         self._human_monitoring_pub = self.create_publisher(Positions,'/human_monitoring',10)
         self._tcp_pose_pub = self.create_publisher(Positions,'/tcp_op_pose',10)
-        self._ssm_pub = self.create_publisher(SSM,'/ssm',10)
+        self.sensor_1 = self.create_publisher(Pose,'/sensor_1',10)
+        self.sensor_2 = self.create_publisher(Pose,'/sensor_2',10)
+        self.log_pub = self.create_publisher(String,'/log_topic',100)
         #action client
         self.traj_client = ActionClient(self, FollowJointTrajectory, '/fr3_arm_controller/follow_joint_trajectory')
+        #client
+        self.switch_client = self.create_client(SwitchController,'/controller_manager/switch_controller')
         #inizializzazione variabili relative al franka
         self.joint_positions = [0.0,0.0,0.0,0.0,0.0,0.0,0.0]
         self.joint_names = ['fr3_joint1', 'fr3_joint2', 'fr3_joint3', 'fr3_joint4', 'fr3_joint5', 'fr3_joint6', 'fr3_joint7']
         self.actual_time = Duration()
         self.trajectory = None
         self.tcp_pose_covariance = [0.0] * 36
-        self.tcp_velcity_covariance = [0.0] * 36
-        # DATI DA LEGGERE DA FILE YAML
-        self.use_robot_velocity = False
-        self.stop_time = 0.5
-        self.reaction_time = 0.5
-        self.safety_margin = 0.5
-        self.tcp_to_op_max_speed = 0.5
-        self.robot_stop_speed = 0.5
         #inizializzazione buffer e transform listener
         self.tf_buffer = Buffer()
         self.tf_listener = TransformListener(self.tf_buffer, self)
@@ -52,7 +51,8 @@ class Bridge(Node) :
         self.op_pose = Pose()
         self.op_pose_covariance = [0.0]*36
         self.op_velocity_covariance = [0.0]*36
-        self.use_operator_velocity = False
+        # traiettoria da inviare dopo che il controllore è stato attivato
+        self._pending_recovery_trajectory = None
 
 
 
@@ -60,9 +60,10 @@ class Bridge(Node) :
     def manage_movement(self,request,response):
         if(request.data):
             if self.joint_positions is None or self.joint_names is None:
-                self.get_logger().warn("Joint states not received yet")
+                self.send_log("Joint states not received yet")
+                self.get_logger().info()
                 return
-            
+            #stop robot
             goal_msg = FollowJointTrajectory.Goal()
             goal_msg.trajectory.joint_names = self.joint_names
             point = JointTrajectoryPoint()
@@ -74,16 +75,49 @@ class Bridge(Node) :
             self.traj_client.wait_for_server()
             future = self.traj_client.send_goal_async(goal_msg)
             future.add_done_callback(self.goal_response_callback)
-            
+
+            #disable controller
+            req = SwitchController.Request()
+            req.start_controllers = []
+            req.stop_controllers = ['fr3_arm_controller']
+            req.strictness = 2
+            req.start_asap = False
+            req.timeout = Duration(sec=0,nanosec=0)
+
+            if not self.switch_client.wait_for_service(timeout_sec=2.0):
+                self.send_log("Cannot contact controller_manager")
+                self.get_logger().info("Cannot contact controller_manager")
+            else:
+                future = self.switch_client.call_async(req)
+                future.add_done_callback(self._switch_controller_callback)
+
+            #server response
             response.success = True
             response.message = "Robot Stopped"
         else:
+            #enable the controller
+            req = SwitchController.Request()
+            req.start_controllers = ['fr3_arm_controller']
+            req.stop_controllers = []
+            req.strictness = 2
+            req.start_asap = False
+            req.timeout = Duration(sec=0,nanosec=0)            
+            
+            if not self.switch_client.wait_for_service(timeout_sec=2.0):
+                self.send_log("Cannot contact controller_manager")
+                self.get_logger().info("Cannot contact controller_manager")
+            else:
+                future = self.switch_client.call_async(req)
+                future.add_done_callback(self._switch_controller_callback)
+            
             if not self.trajectory:
-                self.get_logger().warn("No trajectory received yet!")
+                self.send_log("No trajectory received yet!")
+                self.get_logger().info("No trajectory received yet!")
                 response.success = False
                 response.message = "No trajectory"
                 return response
-            
+
+            #send trajectory to follow
             goal_msg = FollowJointTrajectory.Goal()
             goal_msg.trajectory.joint_names = self.joint_names
             point = JointTrajectoryPoint()
@@ -95,10 +129,7 @@ class Bridge(Node) :
             point.time_from_start.sec = sec if sec > 0 else 0
             point.time_from_start.nanosec = nanosec if nanosec > 0 else 0
             goal_msg.trajectory.points.append(point)
-
-            self.traj_client.wait_for_server()
-            future = self.traj_client.send_goal_async(goal_msg)
-            future.add_done_callback(self.goal_response_callback)
+            self._pending_recovery_trajectory = goal_msg
 
             response.success = True
             response.message = "Robot Moving"
@@ -126,8 +157,10 @@ class Bridge(Node) :
     def goal_response_callback(self, future):
         goal_handle = future.result()
         if not goal_handle.accepted:
+            self.send_log("goal rejected")
             self.get_logger().info("goal rejected")
             return
+        self.send_log("goal accepted")
         self.get_logger().info("goal accepted")
     
     #read tcp and op pose and send it to state machine
@@ -139,8 +172,9 @@ class Bridge(Node) :
                 'fr3_hand_tcp',
                 rclpy.time.Time())
         except TransformException as ex:
-            self.get_logger().info(
+            self.send_log(
                 f'Could not transform base to fr3_hand_tcp: {ex}')
+            self.get_logger().info(f'Could not transform base to fr3_hand_tcp: {ex}')
             return
         #CREA IL MESSAGGIO DA INVIARE AL TOPIC DELLA MODALITA' SRS E HG
         #imposta la posizione del tcp
@@ -156,29 +190,21 @@ class Bridge(Node) :
         #pubblica il messaggio
         self._human_monitoring_pub.publish(position_msg)
         self._tcp_pose_pub.publish(position_msg)
-
-        #CREA IL MESSAGGIO SSM
-        ssm_msg = SSM()
-        ssm_msg.use_robot_velocity = self.use_robot_velocity
-        ssm_msg.use_operator_velocity = self.use_operator_velocity
-        ssm_msg.operator_state.operator_pose.pose = self.op_pose
-        ssm_msg.operator_state.operator_pose.covariance = self.op_pose_covariance
-        ssm_msg.robot_state.robot_pose.pose.position.x = t.transform.translation.x
-        ssm_msg.robot_state.robot_pose.pose.position.y = t.transform.translation.y
-        ssm_msg.robot_state.robot_pose.pose.position.z = t.transform.translation.z
-        ssm_msg.robot_state.robot_pose.pose.orientation = t.transform.rotation
-        ssm_msg.robot_state.robot_pose.covariance = self.tcp_pose_covariance
-        ssm_msg.stop_time = self.stop_time
-        ssm_msg.reaction_time = self.reaction_time
-        ssm_msg.safety_margin = self.safety_margin
-        ssm_msg.tcp_to_op_max_speed = self.tcp_to_op_max_speed
-        ssm_msg.robot_stop_speed = self.robot_stop_speed
-
-        self._ssm_pub.publish(ssm_msg)
     
     #read operator pose
     def read_op_pose(self, msg: CollisionObject):
-        self.op_pose = msg.pose
+        self.op_pose = msg.primitive_poses[0]
+        """op_pose_fake = Pose()
+        op_pose_fake.position.x = self.op_pose.position.x + random.gauss(0,1.0)
+        op_pose_fake.position.y = self.op_pose.position.y + random.gauss(0,1.0)
+        op_pose_fake.position.z = self.op_pose.position.z + random.gauss(0,1.0)
+
+        op_pose_fake.position.x = self.op_pose.position.x + 200.0
+        op_pose_fake.position.y = self.op_pose.position.y + 200.0
+        op_pose_fake.position.z = self.op_pose.position.z + 200.0"""
+        
+        self.sensor_1.publish(self.op_pose)
+        self.sensor_2.publish(self.op_pose)
     
     #switch to/from manual control
     def change_control(self, request, response):
@@ -194,6 +220,31 @@ class Bridge(Node) :
             response.message = "Automatic guide ready"
         
         return response
+    
+    #callback for disble controller
+    def _switch_controller_callback(self, future):
+        try:
+            result = future.result()
+            if result.ok:
+                self.send_log("Controller switch successful")
+                self.get_logger().info("Controller switch successful")
+                if self._pending_recovery_trajectory is not None:
+                    self.send_log("Robot starts moving again")
+                    self.get_logger().info("Robot starts moving again")
+                    self.traj_client.wait_for_server()
+                    future = self.traj_client.send_goal_async(self._pending_recovery_trajectory)
+                    future.add_done_callback(self.goal_response_callback)
+            else:
+                self.send_log("Controller switch failed")
+                self.get_logger().info("Controller switch failed")
+        except Exception as e:
+            self.send_log(f"Controller switch service call failed: {e}")
+            self.get_logger().info(f"Controller switch service call failed: {e}")
+    
+    def send_log(self, string):
+        log = String()
+        log.data = string
+        self.log_pub.publish(log)
 
 
 
